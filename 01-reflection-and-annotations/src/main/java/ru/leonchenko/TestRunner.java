@@ -10,14 +10,16 @@ import java.util.List;
 
 public class TestRunner {
 
-    public static void runTests(Class<?> clazz) {
+    public static void runTests(Class<?> clazz) throws Exception {
 
-        List<Method> beforeSuiteMethods = new ArrayList<>();
-        List<Method> afterSuiteMethods = new ArrayList<>();
+        Method beforeSuiteMethod = null;
+        Method afterSuiteMethod = null;
         List<Method> beforeTestMethods = new ArrayList<>();
         List<Method> afterTestMethods = new ArrayList<>();
         List<Method> testMethods = new ArrayList<>();
         List<Method> csvMethods = new ArrayList<>();
+
+        var instance = clazz.getDeclaredConstructor().newInstance();
 
         for (Method method : clazz.getDeclaredMethods()) {
 
@@ -28,13 +30,20 @@ public class TestRunner {
                 }
                 testMethods.add(method);
             }
+
             if (method.isAnnotationPresent(BeforeSuite.class)) {
                 checkIsStatic(method);
-                beforeSuiteMethods.add(method);
+                if (beforeSuiteMethod != null) {
+                    throw new RuntimeException("Может быть только один метод с аннотацией @BeforeSuite");
+                }
+                beforeSuiteMethod = method;
             }
             if (method.isAnnotationPresent(AfterSuite.class)) {
                 checkIsStatic(method);
-                afterSuiteMethods.add(method);
+                if (afterSuiteMethod != null) {
+                    throw new RuntimeException("Может быть только один метод с аннотацией @AfterSuite");
+                }
+                afterSuiteMethod = method;
             }
             if (method.isAnnotationPresent(BeforeTest.class)) {
                 beforeTestMethods.add(method);
@@ -47,27 +56,24 @@ public class TestRunner {
             }
         }
 
-
         try {
-
-            var instance = clazz.getDeclaredConstructor().newInstance();
 
             sortTestMethods(testMethods);
 
-            suiteMethodsInvoke(beforeSuiteMethods, "@BeforeSuite");
+            suiteMethodsInvoke(beforeSuiteMethod);
 
             executeCsvMethods(csvMethods, instance);
 
-            executeBeforeAndAfterTestMethodsWithingTestMethods(testMethods, beforeTestMethods, instance, afterTestMethods);
+            executeBeforeAfterTestLifecycle(testMethods, beforeTestMethods, instance, afterTestMethods);
 
-            suiteMethodsInvoke(afterSuiteMethods, "@AfterSuite");
+            suiteMethodsInvoke(afterSuiteMethod);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static void executeBeforeAndAfterTestMethodsWithingTestMethods(List<Method> testMethods, List<Method> beforeTestMethods, Object instance, List<Method> afterTestMethods) throws IllegalAccessException, InvocationTargetException {
+    private static void executeBeforeAfterTestLifecycle(List<Method> testMethods, List<Method> beforeTestMethods, Object instance, List<Method> afterTestMethods) throws IllegalAccessException, InvocationTargetException {
         for (Method testMethod : testMethods) {
 
             for (Method beforeTestMethod : beforeTestMethods) {
@@ -93,14 +99,9 @@ public class TestRunner {
         }
     }
 
-    private static void suiteMethodsInvoke(List<Method> suiteMethods, String annotationType) throws IllegalAccessException, InvocationTargetException {
-        switch (suiteMethods.size()) {
-            case 0 -> {}
-            case 1 -> {
-                var method = suiteMethods.get(0);
-                method.invoke(null);
-            }
-            default -> throw new RuntimeException("Может быть только один метод с аннотацией " + annotationType + ".");
+    private static void suiteMethodsInvoke(Method suiteMethods) throws InvocationTargetException, IllegalAccessException {
+        if (suiteMethods !=null) {
+            suiteMethods.invoke(null);
         }
     }
 
@@ -141,6 +142,10 @@ public class TestRunner {
     }
 
     public static void main(String[] args) {
-        runTests(Tests.class);
+        try {
+            runTests(Tests.class);
+        } catch (Exception exception) {
+            exception.printStackTrace();
+        }
     }
 }
